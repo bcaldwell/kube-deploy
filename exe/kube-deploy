@@ -1,0 +1,4 @@
+#!/usr/bin/env ruby
+
+require 'kube-deploy'
+puts ARGV[0]
