@@ -1,7 +1,7 @@
 # coding: utf-8
 lib = File.expand_path('../lib', __FILE__)
 $LOAD_PATH.unshift(lib) unless $LOAD_PATH.include?(lib)
-require 'version'
+require 'kube-deploy/version'
 
 Gem::Specification.new do |spec|
   spec.name          = "kube-deploy"
@@ -9,7 +9,7 @@ Gem::Specification.new do |spec|
   spec.authors       = ["Benjamin Caldwell"]
   spec.email         = ["caldwellbenjamin8@gmail.com"]
 
-  spec.summary       = %q{A tool deploy folders to a kubernetes cluster}
+  spec.summary       = 'A tool deploy folders to a kubernetes cluster'
   spec.homepage      = "https://github.com/benjamincaldwell/kube-deploy"
   spec.license       = "MIT"
 
@@ -22,6 +22,14 @@ Gem::Specification.new do |spec|
 
   spec.add_development_dependency "bundler", "~> 1.14"
   spec.add_development_dependency "rake", "~> 10.0"
+  spec.add_development_dependency "minitest", "~> 5.0"
+  spec.add_development_dependency "minitest-reporters"
+  spec.add_development_dependency "pry"
+  spec.add_development_dependency "byebug"
+  spec.add_development_dependency "rubocop"
+  spec.add_development_dependency "vcr"
+  spec.add_development_dependency "webmock"
 
   spec.add_dependency "thor"
+  spec.add_dependency "kubeclient"
 end
