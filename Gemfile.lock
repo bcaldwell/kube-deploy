@@ -1,7 +1,7 @@
 PATH
   remote: .
   specs:
-    kube-deploy (0.1.0)
+    kube-deploy (0.2.0)
       kubeclient
       thor
 
@@ -95,4 +95,4 @@ DEPENDENCIES
   webmock
 
 BUNDLED WITH
-   1.14.6
+   1.15.0
