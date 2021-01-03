@@ -1,5 +1,0 @@
-#!/usr/bin/env ruby
-
-require 'kube-deploy'
-
-KubeDeploy::CLI.start( ARGV )
