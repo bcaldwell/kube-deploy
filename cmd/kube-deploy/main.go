@@ -3,8 +3,10 @@ package main
 import (
 	"flag"
 	"fmt"
+	"os"
 
 	"github.com/bcaldwell/kube-deploy/pkg/deploy"
+	"github.com/bcaldwell/kube-deploy/pkg/lib/logger"
 )
 
 func main() {
@@ -18,5 +20,9 @@ func main() {
 		return
 	}
 
-	fmt.Print(d.Run())
+	err := d.Run()
+	if err != nil {
+		logger.Log("Error deploying %s", err)
+		os.Exit(1)
+	}
 }

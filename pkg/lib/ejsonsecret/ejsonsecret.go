@@ -1,7 +1,6 @@
 package ejsonsecret
 
 import (
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -68,7 +67,10 @@ func DeploySecret(secretsFile string, namespace string, ejsonKey string) error {
 			bytes, _ = json.Marshal(value)
 		}
 
-		secret.Data[key] = []byte(base64.StdEncoding.EncodeToString(bytes))
+		// fmt.Println(string(bytes))
+
+		secret.Data[key] = bytes
+		// fmt.Println(string(secret.Data[key]))
 	}
 
 	logger.Log("Creating secret %s in %s", inputSecret.Name, inputSecret.Namespace)
