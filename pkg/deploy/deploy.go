@@ -1,6 +1,7 @@
 package deploy
 
 import (
+	"bytes"
 	"crypto/md5"
 	"encoding/json"
 	"fmt"
@@ -68,6 +69,10 @@ func getHelmChartName(chart HelmChart, repoList helmRepoListItem) string {
 
 func helmRepoList() ([]helmRepoListItem, error) {
 	out, err := exec.Command("helm", "repo", "list", "-o", "json").Output()
+	if bytes.Contains(out, []byte("no repositories to show")) {
+		return []helmRepoListItem{}, nil
+	}
+
 	if err != nil {
 		return nil, err
 	}
@@ -83,10 +88,7 @@ func setupHelmRepo(repo string) (helmRepoListItem, error) {
 		return helmRepoListItem{}, nil
 	}
 
-	repoList, err := helmRepoList()
-	if err != nil {
-		return helmRepoListItem{}, err
-	}
+	repoList, _ := helmRepoList()
 
 	for _, r := range repoList {
 		if r.URL == repo {
@@ -100,7 +102,7 @@ func setupHelmRepo(repo string) (helmRepoListItem, error) {
 
 	logger.Log("adding helm repo %s with name %s", repo, urlMd5)
 
-	err = exec.Command("helm", "repo", "add", urlMd5, repo).Run()
+	err := exec.Command("helm", "repo", "add", urlMd5, repo).Run()
 	if err != nil {
 		return helmRepoListItem{}, err
 	}
