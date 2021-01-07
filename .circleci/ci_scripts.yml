@@ -1,0 +1,8 @@
+go:
+  build:
+    go_build_args: -output .ci-build/{{.OS}}_{{.Arch}} -arch amd64 -os linux -os darwin ./cmd/kube-deploy
+
+github:
+  release:
+    path: .ci-build
+    delete: true
