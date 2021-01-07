@@ -10,6 +10,8 @@ import (
 	"github.com/bcaldwell/kube-deploy/pkg/lib/logger"
 )
 
+const inClusterSAMountPoint = "/var/run/secrets/kubernetes.io/serviceaccount"
+
 func (d *Deploy) getKubeConfig() (string, error) {
 	if kubeconfig := os.Getenv("KUBE_CONFIG"); kubeconfig != "" {
 		kubeconfig = expandPath(kubeconfig)
@@ -53,7 +55,7 @@ func (d *Deploy) getKubeConfig() (string, error) {
 		return f.Name(), nil
 	}
 
-	if _, err := os.Stat(d.KubeconfigPath); err == nil {
+	if _, err := os.Stat(inClusterSAMountPoint); err == nil {
 		logger.Log("running in cluster, using in cluster service account kube api access")
 		return "", nil
 	}
