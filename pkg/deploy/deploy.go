@@ -5,6 +5,7 @@ import (
 	"crypto/md5"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"os"
 	"os/exec"
 	"path"
@@ -69,6 +70,7 @@ func getHelmChartName(chart HelmChart, repoList helmRepoListItem) string {
 
 func helmRepoList() ([]helmRepoListItem, error) {
 	out, err := exec.Command("helm", "repo", "list", "-o", "json").Output()
+	fmt.Println(string(out), err)
 	if bytes.Contains(out, []byte("no repositories to show")) {
 		return []helmRepoListItem{}, nil
 	}
@@ -169,7 +171,17 @@ func deployAndDeleteEjsonFiles(c context, namespace string, folder DeployFolder)
 		return filepath.Ext(path) == ".ejson"
 	})
 
+	ejsonKeyPath := os.Getenv("EJSON_KEY_PATH")
 	ejsonKey := os.Getenv("EJSON_KEY")
+
+	if ejsonKeyPath != "" && ejsonKey == "" {
+		b, err := ioutil.ReadFile(ejsonKeyPath)
+		if err != nil {
+			return err
+		}
+
+		ejsonKey = string(b)
+	}
 
 	for _, file := range ejsonFiles {
 		err = ejsonsecret.DeploySecret(path.Join(c.rootDir, file), namespace, ejsonKey)
