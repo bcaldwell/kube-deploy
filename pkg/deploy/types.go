@@ -49,8 +49,8 @@ type DeployFolder struct {
 	// none, helm or kustomize is supported
 	RenderEngine RenderEngine
 	Path         string
-	Order        int
-	HelmChart    *HelmChart
+	Order        *int
+	HelmChart    *HelmChart `json:"helmChart,omitempty"`
 }
 
 type HelmChart struct {
@@ -73,4 +73,8 @@ type Bastion struct {
 	KeyFile string
 	//
 	RemotePortforwardHost string
+}
+
+func stringPointer(i int) *int {
+	return &i
 }

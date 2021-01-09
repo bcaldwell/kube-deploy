@@ -73,7 +73,16 @@ func (d *Deploy) Run(target string) error {
 
 	// sort deploy folder by priority
 	sort.Slice(d.DeployFolders, func(i, j int) bool {
-		return d.DeployFolders[i].Order < d.DeployFolders[j].Order
+		var a, b int
+		if d.DeployFolders[i].Order != nil {
+			a = *d.DeployFolders[i].Order
+		}
+
+		if d.DeployFolders[j].Order != nil {
+			b = *d.DeployFolders[i].Order
+		}
+
+		return a < b
 	})
 
 	return d.runDeploy()
@@ -126,7 +135,6 @@ func getGitAuth() (transport.AuthMethod, error) {
 
 func (d *Deploy) setEnv(kubeconfig string) {
 	for k, v := range d.Vars {
-		fmt.Println(k, v)
 		os.Setenv(k, v)
 	}
 

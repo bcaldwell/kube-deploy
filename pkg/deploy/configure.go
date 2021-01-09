@@ -22,18 +22,18 @@ type MetadataConfig struct {
 	Vars        map[string]string
 	Namespace   string
 	ReleaseName string
-	Folders     []Folder
+	Folders     []DeployFolder
 }
 
 type Target struct {
-	Name string `json:"name"`
+	Name         string `json:"name"`
+	MergeFolders []MergeFolder
 	MetadataConfig
 }
 
-type Folder struct {
-	RenderEngine RenderEngine
-	Path         string
-	HelmChart    *HelmChart `json:"helm"`
+type MergeFolder struct {
+	InsteadOf string
+	DeployFolder
 }
 
 func (d *Deploy) ConfigureFolderFromMetadata(folder string, targetName string) error {
@@ -69,9 +69,20 @@ func (d *Deploy) ConfigureFolderFromMetadata(folder string, targetName string) e
 
 	if target != nil {
 		logger.Log("found target overrides for %s", targetName)
+
 		targetDeploy := convertMetadataToDeploy(d.srcFs, folder, target.MetadataConfig, false)
 
-		// this a bit stange and flipped so that targetDeploy is the more important one
+		// only use merge logic if folders is not set in the target
+		if len(targetDeploy.DeployFolders) == 0 {
+			targetDeploy.DeployFolders, err = mergeDeployFolders(folder, m.Helm, metadataDeploy.DeployFolders, target.MergeFolders)
+			if err != nil {
+				return fmt.Errorf("failed to merge mergeFolders into existing deploy folders: %w", err)
+			}
+		} else if len(target.MergeFolders) != 0 {
+			return fmt.Errorf("cannot set mergFolders and Folders in the same target in %s", targetName)
+		}
+
+		// this a bit strange and flipped so that targetDeploy is the more important one
 		err = mergo.Merge(targetDeploy, metadataDeploy, mergoOpts...)
 		if err != nil {
 			return fmt.Errorf("failed to merge target config with metadata config: %w", err)
@@ -93,6 +104,7 @@ func getTargetConfig(targetName string, targets []Target) (*Target, error) {
 			return &t, nil
 		}
 	}
+
 	return nil, fmt.Errorf("unable to find target %s in target list", targetName)
 }
 
@@ -105,22 +117,22 @@ func convertMetadataToDeploy(fs afero.Fs, folder string, m MetadataConfig, defau
 	}
 }
 
-func configureDeployFolders(fs afero.Fs, rootFolder string, folders []Folder, helmChart *HelmChart, defaultFolders bool) []DeployFolder {
+func configureDeployFolders(fs afero.Fs, rootFolder string, folders []DeployFolder, helmChart *HelmChart, defaultFolders bool) []DeployFolder {
 	deployFolders := []DeployFolder{}
 
 	kubeFolders := map[string]DeployFolder{
 		"predeploy": {
-			Order: 1,
+			Order: stringPointer(1),
 		},
 		"secrets": {
-			Order: 2,
+			Order: stringPointer(2),
 		},
 		"helmvalues": {
 			RenderEngine: RenderEngineHelm,
-			Order:        100,
+			Order:        stringPointer(100),
 		},
 		"postdeploy": {
-			Order: 101,
+			Order: stringPointer(101),
 		},
 	}
 
@@ -145,20 +157,53 @@ func configureDeployFolders(fs afero.Fs, rootFolder string, folders []Folder, he
 	}
 
 	for i, f := range folders {
-		file := path.Join(rootFolder, f.Path)
-
-		deployFolder := DeployFolder{
-			Path:      file,
-			Order:     i,
-			HelmChart: f.HelmChart,
-		}
-
-		if deployFolder.HelmChart == nil {
-			deployFolder.HelmChart = helmChart
-		}
-
-		deployFolders = append(deployFolders, deployFolder)
+		deployFolders = append(deployFolders, processDeployFolder(rootFolder, i, helmChart, f))
 	}
 
 	return deployFolders
+}
+
+func mergeDeployFolders(rootFolder string, defaultHelmChart *HelmChart, destFolders []DeployFolder, mergeFolders []MergeFolder) ([]DeployFolder, error) {
+	for i, mf := range mergeFolders {
+		if mf.Order != nil {
+			destFolders = append(destFolders, processDeployFolder(rootFolder, *mf.Order, defaultHelmChart, mf.DeployFolder))
+			continue
+		}
+
+		if mf.InsteadOf == "" {
+			return destFolders, fmt.Errorf("merge folder[%d] must set order or insteadOf", i)
+		}
+
+		found := false
+		searchPath := path.Join(rootFolder, mf.InsteadOf)
+
+		for j, f := range destFolders {
+			if f.Path == searchPath {
+				destFolders[j] = processDeployFolder(rootFolder, *f.Order, defaultHelmChart, mf.DeployFolder)
+				found = true
+
+				continue
+			}
+		}
+
+		if !found {
+			return destFolders, fmt.Errorf("unable to find referenced path %s", mf.InsteadOf)
+		}
+	}
+
+	return destFolders, nil
+}
+
+func processDeployFolder(rootFolder string, defaultOrder int, defaultHelmChart *HelmChart, f DeployFolder) DeployFolder {
+	f.Path = path.Join(rootFolder, f.Path)
+
+	if f.Order == nil {
+		f.Order = &defaultOrder
+	}
+
+	if f.HelmChart == nil {
+		f.HelmChart = defaultHelmChart
+	}
+
+	return f
 }
