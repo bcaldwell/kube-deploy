@@ -67,13 +67,10 @@ func DeploySecret(secretsFile string, namespace string, ejsonKey string) error {
 			bytes, _ = json.Marshal(value)
 		}
 
-		// fmt.Println(string(bytes))
-
 		secret.Data[key] = bytes
-		// fmt.Println(string(secret.Data[key]))
 	}
 
-	logger.Log("Creating secret %s in %s", inputSecret.Name, inputSecret.Namespace)
+	logger.Log("creating secret %s in %s", inputSecret.Name, inputSecret.Namespace)
 
 	return kubeapi.ApplyResource(secret)
 }

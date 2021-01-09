@@ -1,6 +1,7 @@
 package deploy
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -34,7 +35,8 @@ func (d *Deploy) Run() error {
 		return err
 	}
 
-	logger.Log("using config %#v", d)
+	b, _ := json.Marshal(d)
+	logger.Log("using config %s", b)
 
 	d.rootDir, err = ioutil.TempDir(os.TempDir(), "kube-deploy")
 	if err != nil {
@@ -57,7 +59,7 @@ func (d *Deploy) Run() error {
 
 	// sort deploy folder by priority
 	sort.Slice(d.DeployFolders, func(i, j int) bool {
-		return d.DeployFolders[i].Priority < d.DeployFolders[j].Priority
+		return d.DeployFolders[i].Order < d.DeployFolders[j].Order
 	})
 
 	kubeConfig, err := d.getKubeConfig()
@@ -71,11 +73,6 @@ func (d *Deploy) Run() error {
 	}
 
 	d.setEnv(kubeConfig)
-
-	err = d.setupHelmChartRepo()
-	if err != nil {
-		return err
-	}
 
 	return d.runDeploy()
 }
@@ -132,10 +129,6 @@ func (d *Deploy) setEnv(kubeconfig string) {
 
 	os.Setenv("KUBECONFIG", kubeconfig)
 	os.Setenv("NAMESPACE", d.Namespace)
-}
-
-func (d *Deploy) setupHelmChartRepo() error {
-	return nil
 }
 
 func runCommand(cmd *exec.Cmd) error {

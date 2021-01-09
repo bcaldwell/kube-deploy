@@ -30,7 +30,7 @@ func (d *Deploy) getKubeConfig() (string, error) {
 	if kubeconfig := os.Getenv(d.KubeconfigEnv); kubeconfig != "" {
 		var err error
 
-		logger.Log("Creating kubeconfig from environment variable %s", d.KubeconfigEnv)
+		logger.Log("creating kubeconfig from environment variable %s", d.KubeconfigEnv)
 
 		configBytes, err := base64.StdEncoding.DecodeString(kubeconfig)
 		if err != nil {

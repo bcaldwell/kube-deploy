@@ -30,30 +30,51 @@ func (d *Deploy) runDeploy() error {
 		return fmt.Errorf("error while creating namespace %s %w", d.Namespace, err)
 	}
 
-	// ensure we only deploy helm once in the loop
-	helmDeployed := false
-
 	for _, folder := range d.DeployFolders {
-		if !helmDeployed && folder.Priority >= d.Chart.Priority {
-			helmDeployed = true
+		if _, err := d.fs.Stat(folder.Path); err != nil {
+			logger.Log("folder %s not found", folder.Path)
+			return nil
+		}
 
-			err = releaseHelm(d.context, d.ReleaseName, d.Namespace, d.Chart)
-			if err != nil {
-				return err
+		logger.Log("deploying folder %s using %s as the render engine", folder.Path, folder.RenderEngine)
+
+		switch getRenderEngineWithDefault(d.fs, folder) {
+		case RenderEngineHelm:
+			// todo: move this to a valdiation function
+			if folder.HelmChart == nil {
+				return fmt.Errorf("helm chart can not be nil when helm render engine is set. Found in %v", folder)
 			}
-		}
 
-		err = deployFolder(d.context, d.Namespace, folder)
-		if err != nil {
-			return err
+			err = releaseHelm(d.context, d.Namespace, folder.Path, *folder.HelmChart)
+		case RenderEngineNone:
+			err = kubectlDeployFolder(d.context, d.Namespace, folder, []string{"-R", "-f"})
+		case RenderEngineKustomize:
+			err = kubectlDeployFolder(d.context, d.Namespace, folder, []string{"-k"})
+		default:
+			return fmt.Errorf("%v has invald deploy type %s", folder, folder.RenderEngine)
 		}
 	}
 
-	if helmDeployed {
-		return nil
+	return err
+}
+
+func getRenderEngineWithDefault(fs afero.Fs, folder DeployFolder) RenderEngine {
+	if folder.RenderEngine != RenderEngineAuto {
+		return folder.RenderEngine
 	}
 
-	return releaseHelm(d.context, d.ReleaseName, d.Namespace, d.Chart)
+	if folder.HelmChart != nil {
+		return RenderEngineHelm
+	}
+
+	kustomizeFiles := []string{"kustomization.yaml", "kustomization.yml"}
+	for _, f := range kustomizeFiles {
+		if _, err := fs.Stat(path.Join(folder.Path, f)); err == nil {
+			return RenderEngineKustomize
+		}
+	}
+
+	return RenderEngineNone
 }
 
 func getHelmChartName(chart HelmChart, repoList helmRepoListItem) string {
@@ -70,7 +91,6 @@ func getHelmChartName(chart HelmChart, repoList helmRepoListItem) string {
 
 func helmRepoList() ([]helmRepoListItem, error) {
 	out, err := exec.Command("helm", "repo", "list", "-o", "json").Output()
-	fmt.Println(string(out), err)
 	if bytes.Contains(out, []byte("no repositories to show")) {
 		return []helmRepoListItem{}, nil
 	}
@@ -133,14 +153,7 @@ func createNamespace(namespace string) error {
 	return kubeapi.ApplyResource(ns)
 }
 
-func deployFolder(c context, namespace string, folder DeployFolder) error {
-	logger.Log("deploying folder %s", folder.Path)
-
-	if _, err := c.fs.Stat(folder.Path); err != nil {
-		logger.Log("folder %s not found", folder.Path)
-		return nil
-	}
-
+func kubectlDeployFolder(c context, namespace string, folder DeployFolder, applyArgs []string) error {
 	err := deployAndDeleteEjsonFiles(c, namespace, folder)
 	if err != nil {
 		return err
@@ -157,8 +170,12 @@ func deployFolder(c context, namespace string, folder DeployFolder) error {
 
 	folderPath := path.Join(c.rootDir, folder.Path)
 
+	args := []string{"apply"}
+	args = append(args, applyArgs...)
+	args = append(args, folderPath)
+
 	// -R for recursive
-	return runCommand(exec.Command("kubectl", "apply", "-R", "-f", folderPath))
+	return runCommand(exec.Command("kubectl", args...))
 }
 
 func deployAndDeleteEjsonFiles(c context, namespace string, folder DeployFolder) error {
@@ -199,8 +216,8 @@ func deployAndDeleteEjsonFiles(c context, namespace string, folder DeployFolder)
 	return nil
 }
 
-func releaseHelm(c context, releaseName, namespace string, chart HelmChart) error {
-	logger.Log("Deploying helm chart %s with release %s into %s", chart.Name, releaseName, namespace)
+func releaseHelm(c context, namespace string, folder string, chart HelmChart) error {
+	logger.Log("Deploying helm chart %s with release %s into %s", chart.Name, chart.ReleaseName, namespace)
 
 	helmArgs := []string{"upgrade", "--wait", "--install"}
 
@@ -213,13 +230,13 @@ func releaseHelm(c context, releaseName, namespace string, chart HelmChart) erro
 		return err
 	}
 
-	helmArgs = append(helmArgs, "-n", namespace, releaseName, getHelmChartName(chart, repoItem))
+	helmArgs = append(helmArgs, "-n", namespace, chart.ReleaseName, getHelmChartName(chart, repoItem))
 
-	if _, err := c.fs.Stat(chart.ValuesFolder); err == nil {
-		files, err := listAllFilesInFolder(c.fs, chart.ValuesFolder)
+	if _, err := c.fs.Stat(folder); err == nil {
+		files, err := listAllFilesInFolder(c.fs, folder)
 
 		if err != nil {
-			return fmt.Errorf("failed to get files in helm config folder %s %w", chart.ValuesFolder, err)
+			return fmt.Errorf("failed to get files in helm config folder %s %w", folder, err)
 		}
 
 		for _, f := range files {

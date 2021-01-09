@@ -1,5 +1,7 @@
 package deploy
 
+//go:generate go-enum -f=$GOFILE --marshal --lower
+
 import "github.com/spf13/afero"
 
 type Deploy struct {
@@ -19,12 +21,6 @@ type Deploy struct {
 	// folders inside config folder to deploy, along with metadata for how to deploy them
 	DeployFolders []DeployFolder
 
-	// helm chart configuration
-	Chart HelmChart
-
-	// release name, mainly used as the helm release name
-	ReleaseName string
-
 	// environment variables to set, these variables are processed in the templates
 	Vars map[string]string
 
@@ -39,16 +35,25 @@ type context struct {
 	rootDir string
 }
 
+/*
+ENUM(
+Auto
+None
+Helm
+Kustomize
+)
+*/
+type RenderEngine int
+
 type DeployFolder struct {
-	// none or kustomize is supported
-	RenderEngine string
+	// none, helm or kustomize is supported
+	RenderEngine RenderEngine
 	Path         string
-	Priority     int
+	Order        int
+	HelmChart    *HelmChart
 }
 
 type HelmChart struct {
-	// helm chart configuration folder
-	ValuesFolder string
 	// helm chart repo, can be a url or name. If it is a URL the repo will be added first
 	Repo string
 	// name of the helm chart to install, will try to install <HelmChartRepo Name>/<HelmChartName>
@@ -56,8 +61,8 @@ type HelmChart struct {
 	// helm chart path
 	Path string
 	// version of the helm chart to install
-	Version  string
-	Priority int
+	Version     string
+	ReleaseName string
 }
 
 type Bastion struct {

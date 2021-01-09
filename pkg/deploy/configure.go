@@ -11,22 +11,26 @@ import (
 )
 
 type Metadata struct {
-	Helm        HelmChart `json:"helm"`
-	Targets     []Target  `json:"targets"`
+	Helm        *HelmChart `json:"helm"`
+	Targets     []Target   `json:"targets"`
 	Vars        map[string]string
 	Namespace   string
 	ReleaseName string
+	Folders     []Folder
 }
 
 type Target struct {
-	Name            string `json:"name"`
-	FolderOverrides map[string]string
+	Name string `json:"name"`
+}
+
+type Folder struct {
+	RenderEngine RenderEngine
+	Path         string
+	HelmChart    *HelmChart `json:"helm"`
 }
 
 func (d *Deploy) ConfigureFolderFromMetadata(folder string) error {
 	metadataFile := path.Join(folder, "metadata.yml")
-	defaultFolders := map[string]int{"predeploy": 1, "secrets": 2, "postdeploy": 101}
-	helmOrder := 100
 
 	if _, err := d.srcFs.Stat(metadataFile); os.IsNotExist(err) {
 		logger.Log("skipping configuring from metadata, %s does not exist", metadataFile)
@@ -39,39 +43,76 @@ func (d *Deploy) ConfigureFolderFromMetadata(folder string) error {
 	}
 
 	m := Metadata{}
+
 	err = yaml.Unmarshal(content, &m)
 	if err != nil {
 		return err
 	}
 
 	metadataDeploy := Deploy{
-		ConfigFolder: folder,
-		Vars:         m.Vars,
-		Namespace:    m.Namespace,
-		Chart:        m.Helm,
-		ReleaseName:  m.ReleaseName,
-	}
-
-	if metadataDeploy.Chart.Priority == 0 {
-		metadataDeploy.Chart.Priority = helmOrder
-	}
-
-	if metadataDeploy.Chart.ValuesFolder == "" {
-		metadataDeploy.Chart.ValuesFolder = "helmvalues"
-	}
-
-	for n, p := range defaultFolders {
-		file := path.Join(folder, n)
-
-		if _, err := d.srcFs.Stat(file); os.IsNotExist(err) {
-			continue
-		}
-
-		d.DeployFolders = append(d.DeployFolders, DeployFolder{
-			Path:     file,
-			Priority: p,
-		})
+		ConfigFolder:  folder,
+		Vars:          m.Vars,
+		Namespace:     m.Namespace,
+		DeployFolders: configureDeployFolders(d.srcFs, folder, m.Folders, m.Helm),
 	}
 
 	return mergo.Merge(d, &metadataDeploy)
+}
+
+func configureDeployFolders(fs afero.Fs, rootFolder string, folders []Folder, helmChart *HelmChart) []DeployFolder {
+	deployFolders := []DeployFolder{}
+
+	kubeFolders := map[string]DeployFolder{
+		"predeploy": {
+			Order: 1,
+		},
+		"secrets": {
+			Order: 2,
+		},
+		"helmvalues": {
+			RenderEngine: RenderEngineHelm,
+			Order:        100,
+		},
+		"postdeploy": {
+			Order: 101,
+		},
+	}
+
+	if len(folders) == 0 {
+		for n, f := range kubeFolders {
+			file := path.Join(rootFolder, n)
+
+			if _, err := fs.Stat(file); os.IsNotExist(err) {
+				continue
+			}
+
+			if f.RenderEngine == RenderEngineHelm && f.HelmChart == nil {
+				f.HelmChart = helmChart
+			}
+
+			f.Path = file
+
+			deployFolders = append(deployFolders, f)
+		}
+
+		return deployFolders
+	}
+
+	for i, f := range folders {
+		file := path.Join(rootFolder, f.Path)
+
+		deployFolder := DeployFolder{
+			Path:      file,
+			Order:     i,
+			HelmChart: f.HelmChart,
+		}
+
+		if deployFolder.HelmChart == nil {
+			deployFolder.HelmChart = helmChart
+		}
+
+		deployFolders = append(deployFolders, deployFolder)
+	}
+
+	return deployFolders
 }
