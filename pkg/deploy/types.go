@@ -24,7 +24,7 @@ type Deploy struct {
 	// environment variables to set, these variables are processed in the templates
 	Vars map[string]string
 
-	Bastion Bastion
+	Bastion *Bastion `json:"bastion,omitempty"`
 
 	context
 }

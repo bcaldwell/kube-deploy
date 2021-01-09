@@ -22,7 +22,7 @@ import (
 	"github.com/spf13/afero"
 )
 
-func (d *Deploy) Run() error {
+func (d *Deploy) Run(target string) error {
 	var err error
 	// returns a FS were the config folder is the root
 	d.srcFs, err = d.setupFS()
@@ -30,13 +30,25 @@ func (d *Deploy) Run() error {
 		return err
 	}
 
-	err = d.ConfigureFolderFromMetadata("/")
+	err = d.ConfigureFolderFromMetadata("/", target)
 	if err != nil {
 		return err
 	}
 
 	b, _ := json.Marshal(d)
 	logger.Log("using config %s", b)
+
+	kubeConfig, err := d.getKubeConfig()
+	if err != nil {
+		return err
+	}
+
+	// remove the kubeconfig if it is a temp file
+	if strings.HasPrefix(kubeConfig, os.TempDir()) {
+		defer os.Remove(kubeConfig)
+	}
+
+	d.setEnv(kubeConfig)
 
 	d.rootDir, err = ioutil.TempDir(os.TempDir(), "kube-deploy")
 	if err != nil {
@@ -52,27 +64,17 @@ func (d *Deploy) Run() error {
 		return err
 	}
 
-	sshTun := d.setupPortForward(d.Bastion.Host, 6443, d.Bastion.RemotePortforwardHost, 6443)
-	if sshTun != nil {
-		defer sshTun.Stop()
+	if d.Bastion != nil {
+		sshTun := d.setupPortForward(d.Bastion.Host, 6443, d.Bastion.RemotePortforwardHost, 6443)
+		if sshTun != nil {
+			defer sshTun.Stop()
+		}
 	}
 
 	// sort deploy folder by priority
 	sort.Slice(d.DeployFolders, func(i, j int) bool {
 		return d.DeployFolders[i].Order < d.DeployFolders[j].Order
 	})
-
-	kubeConfig, err := d.getKubeConfig()
-	if err != nil {
-		return err
-	}
-
-	// remove the kubeconfig if it is a temp file
-	if strings.HasPrefix(kubeConfig, os.TempDir()) {
-		defer os.Remove(kubeConfig)
-	}
-
-	d.setEnv(kubeConfig)
 
 	return d.runDeploy()
 }
@@ -124,6 +126,7 @@ func getGitAuth() (transport.AuthMethod, error) {
 
 func (d *Deploy) setEnv(kubeconfig string) {
 	for k, v := range d.Vars {
+		fmt.Println(k, v)
 		os.Setenv(k, v)
 	}
 
@@ -231,5 +234,6 @@ func expandEnvSafe(s string) string {
 	if expandedVal, ok = os.LookupEnv(s); !ok {
 		return fmt.Sprintf("${%s}", s)
 	}
+
 	return expandedVal
 }
