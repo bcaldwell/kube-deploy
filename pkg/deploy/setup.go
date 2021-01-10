@@ -79,7 +79,7 @@ func (d *Deploy) Run(target string) error {
 		}
 
 		if d.DeployFolders[j].Order != nil {
-			b = *d.DeployFolders[i].Order
+			b = *d.DeployFolders[j].Order
 		}
 
 		return a < b
