@@ -2,6 +2,7 @@ package ejsonsecret
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 
@@ -18,8 +19,10 @@ type ejsonSecret struct {
 	Data      map[string]interface{} `json:"data"`
 }
 
+var InvalidEjsonSecret = errors.New("ejson secret is invalid")
+
 func DeploySecret(secretsFile string, namespace string, ejsonKey string) error {
-	logger.Log("Create kubernetes secret from %s", secretsFile)
+	logger.Log("create kubernetes secret from %s", secretsFile)
 
 	decryptedSource, err := ejson.DecryptFile(secretsFile, "/opt/ejson/keys", ejsonKey)
 	if err != nil {
@@ -34,11 +37,13 @@ func DeploySecret(secretsFile string, namespace string, ejsonKey string) error {
 	}
 
 	if inputSecret.Name == "" {
-		return fmt.Errorf("Error parsing ejson secret: _name can not be blank")
+		logger.Log("skipping creating ejson secret: _name can not be blank")
+		return fmt.Errorf("%w: _name can not be blank", InvalidEjsonSecret)
 	}
 
 	if inputSecret.Namespace == "" {
-		return fmt.Errorf("Error parsing ejson secret: _namespace can not be blank")
+		logger.Log("skipping creating ejson secret: _namespace can not be blank")
+		return fmt.Errorf("%w: _namespace can not be blank", InvalidEjsonSecret)
 	}
 
 	secret := v1.Secret{

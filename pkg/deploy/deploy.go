@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/md5"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -202,6 +203,10 @@ func deployAndDeleteEjsonFiles(c context, namespace string, folder DeployFolder)
 
 	for _, file := range ejsonFiles {
 		err = ejsonsecret.DeploySecret(path.Join(c.rootDir, file), namespace, ejsonKey)
+		if errors.Is(err, ejsonsecret.InvalidEjsonSecret) {
+			continue
+		}
+
 		if err != nil {
 			return err
 		}
