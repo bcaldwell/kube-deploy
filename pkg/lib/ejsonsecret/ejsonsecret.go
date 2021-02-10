@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"os"
 
 	"github.com/Shopify/ejson"
@@ -24,15 +25,14 @@ var InvalidEjsonSecret = errors.New("ejson secret is invalid")
 func DeploySecret(secretsFile string, namespace string, ejsonKey string) error {
 	logger.Log("create kubernetes secret from %s", secretsFile)
 
-	decryptedSource, err := ejson.DecryptFile(secretsFile, "/opt/ejson/keys", ejsonKey)
-	if err != nil {
-		fmt.Printf("Error: failed to decrypt ejson file %s\n", err)
-		os.Exit(1)
-	}
-
 	var inputSecret ejsonSecret
 
-	if err := json.Unmarshal(decryptedSource, &inputSecret); err != nil {
+	encryptedFile, err := ioutil.ReadFile(secretsFile)
+	if err != nil {
+		return fmt.Errorf("failed to read %s: %w", secretsFile, err)
+	}
+
+	if err := json.Unmarshal(encryptedFile, &inputSecret); err != nil {
 		return fmt.Errorf("Failed to unmarshal decrypted json file %w", err)
 	}
 
@@ -44,6 +44,16 @@ func DeploySecret(secretsFile string, namespace string, ejsonKey string) error {
 	if inputSecret.Namespace == "" {
 		logger.Log("skipping creating ejson secret: _namespace can not be blank")
 		return fmt.Errorf("%w: _namespace can not be blank", InvalidEjsonSecret)
+	}
+
+	decryptedSource, err := ejson.DecryptFile(secretsFile, "/opt/ejson/keys", ejsonKey)
+	if err != nil {
+		fmt.Printf("Error: failed to decrypt ejson file %s\n", err)
+		os.Exit(1)
+	}
+
+	if err := json.Unmarshal(decryptedSource, &inputSecret); err != nil {
+		return fmt.Errorf("Failed to unmarshal decrypted json file %w", err)
 	}
 
 	secret := v1.Secret{
