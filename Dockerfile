@@ -9,16 +9,19 @@ RUN go build -o /kube-deploy ./cmd/kube-deploy/main.go
 # Alpine linux with docker installed
 FROM alpine:3.13
 
+# <os>/<arch>
+ARG TARGETPLATFORM
+
 ENV HELM_VERSION=3.7.0
 ENV KUBECTL_VERSION=1.22.2
 
 # install git, helm and kubectl
 RUN apk add --update --no-cache curl ca-certificates git bash && \
-    curl -L https://get.helm.sh/helm-v${HELM_VERSION}-linux-amd64.tar.gz | tar xvz && \
-    mv linux-amd64/helm /usr/bin/helm && \
+    curl -L "https://get.helm.sh/helm-v${HELM_VERSION}-${TARGETPLATFORM/\//-}.tar.gz" | tar xvz && \
+    mv "${TARGETPLATFORM/\//-}/helm" /usr/bin/helm && \
     chmod +x /usr/bin/helm && \
-    rm -rf linux-amd64 && \
-    curl -LO https://storage.googleapis.com/kubernetes-release/release/v${KUBECTL_VERSION}/bin/linux/amd64/kubectl && \
+    rm -rf "${TARGETPLATFORM/\//-}" && \
+    curl -LO "https://storage.googleapis.com/kubernetes-release/release/v${KUBECTL_VERSION}/bin/${TARGETPLATFORM}/kubectl" && \
     mv ./kubectl /usr/bin/kubectl && \
     chmod +x /usr/bin/kubectl && \
     apk del curl && \
