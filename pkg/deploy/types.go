@@ -50,7 +50,7 @@ type DeployFolder struct {
 	RenderEngine RenderEngine
 	Path         string
 	Order        *int
-	HelmChart    *HelmChart `json:"helmChart,omitempty"`
+	HelmChart    *HelmChart `json:"helm,omitempty"`
 }
 
 type HelmChart struct {
@@ -61,8 +61,10 @@ type HelmChart struct {
 	// helm chart path
 	Path string
 	// version of the helm chart to install
-	Version     string
-	ReleaseName string
+	Version      string
+	ReleaseName  string
+	PostRenderer string
+	ValuesFiles  []string
 }
 
 type Bastion struct {

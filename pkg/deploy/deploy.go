@@ -237,20 +237,29 @@ func releaseHelm(c context, namespace string, folder string, chart HelmChart) er
 
 	helmArgs = append(helmArgs, "-n", namespace, chart.ReleaseName, getHelmChartName(chart, repoItem))
 
-	if _, err := c.fs.Stat(folder); err == nil {
-		files, err := listAllFilesInFolder(c.fs, folder)
+	valuesFiles := chart.ValuesFiles
+	for i, f := range valuesFiles {
+		valuesFiles[i] = path.Join(folder, f)
+	}
 
+	if _, err := c.fs.Stat(folder); len(valuesFiles) == 0 && err == nil {
+		valuesFiles, err = listAllFilesInFolder(c.fs, folder)
 		if err != nil {
 			return fmt.Errorf("failed to get files in helm config folder %s %w", folder, err)
 		}
+	}
 
-		for _, f := range files {
-			// todo copy these files and expand them
-			helmArgs = append(helmArgs, "-f", path.Join(c.rootDir, f))
-		}
+	for _, f := range valuesFiles {
+		// todo copy these files and expand them
+		helmArgs = append(helmArgs, "-f", path.Join(c.rootDir, f))
+	}
+
+	if chart.PostRenderer != "" {
+		helmArgs = append(helmArgs, "--post-renderer", chart.PostRenderer)
 	}
 
 	cmd := exec.Command("helm", helmArgs...)
+	cmd.Dir = path.Join(c.rootDir, folder)
 
 	return runCommand(cmd)
 }

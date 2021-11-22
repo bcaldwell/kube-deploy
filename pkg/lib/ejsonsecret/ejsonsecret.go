@@ -41,6 +41,11 @@ func DeploySecret(secretsFile string, namespace string, ejsonKey string) error {
 		return fmt.Errorf("%w: _name can not be blank", InvalidEjsonSecret)
 	}
 
+	// set namespace to default value if no namespace is set in the secret
+	if inputSecret.Namespace == "" {
+		inputSecret.Namespace = namespace
+	}
+
 	if inputSecret.Namespace == "" {
 		logger.Log("skipping creating ejson secret: _namespace can not be blank")
 		return fmt.Errorf("%w: _namespace can not be blank", InvalidEjsonSecret)
@@ -67,10 +72,6 @@ func DeploySecret(secretsFile string, namespace string, ejsonKey string) error {
 		},
 		Data: make(map[string][]byte),
 		Type: v1.SecretTypeOpaque,
-	}
-
-	if namespace != "" {
-		secret.ObjectMeta.Namespace = namespace
 	}
 
 	// convert secrets to base64

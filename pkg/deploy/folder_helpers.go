@@ -53,6 +53,8 @@ func copyAndProcessFolder(srcFs afero.Fs, srcFolder string, destFs afero.Fs, des
 				return err
 			}
 
+			defer f.Close()
+
 			if err = destFs.Chmod(f.Name(), srcFileInfo.Mode()); err != nil {
 				return err
 			}
