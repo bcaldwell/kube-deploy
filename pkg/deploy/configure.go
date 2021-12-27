@@ -1,6 +1,7 @@
 package deploy
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path"
@@ -10,6 +11,8 @@ import (
 	"github.com/imdario/mergo"
 	"github.com/spf13/afero"
 )
+
+var fileNotFoundErr = errors.New("file not found")
 
 type Metadata struct {
 	MetadataConfig
@@ -36,26 +39,40 @@ type MergeFolder struct {
 	DeployFolder
 }
 
+type GlobalVars struct {
+	GlobalVars map[string]string `json:"global_vars"`
+}
+
 func (d *Deploy) ConfigureFolderFromMetadata(folder string, targetName string) error {
 	metadataFile := path.Join(folder, "metadata.yml")
+	m := Metadata{}
 
-	if _, err := d.srcFs.Stat(metadataFile); os.IsNotExist(err) {
+	err := readAndUnmarshal(d.srcFs, &m, os.Getenv("KUBE_DEPLOY_METADATA_FILE"), metadataFile)
+	if errors.Is(err, fileNotFoundErr) {
 		logger.Log("skipping configuring from metadata.yml, %s does not exist", metadataFile)
 		return nil
 	}
 
-	logger.Log("found metadata.yaml, configuring from it")
-
-	content, err := afero.ReadFile(d.srcFs, metadataFile)
 	if err != nil {
 		return err
 	}
 
-	m := Metadata{}
-
-	err = yaml.Unmarshal(content, &m)
+	globalVars, err := d.getGlobalVars(folder)
 	if err != nil {
 		return err
+	}
+
+	if m.Vars == nil {
+		m.Vars = make(map[string]string)
+	}
+
+	for k, v := range globalVars.GlobalVars {
+		// skip existing ones
+		if _, ok := m.Vars[k]; ok {
+			continue
+		}
+
+		m.Vars[k] = v
 	}
 
 	metadataDeploy := convertMetadataToDeploy(d.srcFs, folder, m.MetadataConfig, true)
@@ -92,6 +109,38 @@ func (d *Deploy) ConfigureFolderFromMetadata(folder string, targetName string) e
 	}
 
 	return mergo.Merge(d, metadataDeploy, mergoOpts...)
+}
+
+func (d *Deploy) getGlobalVars(folder string) (GlobalVars, error) {
+	globalEnv := GlobalVars{}
+
+	err := readAndUnmarshal(d.srcFs, &globalEnv, os.Getenv("KUBE_DEPLOY_GLOBAL_VARS"), "global_vars.yml", path.Join(folder, "global_vars.yml"))
+
+	return globalEnv, err
+}
+
+func readAndUnmarshal(fs afero.Fs, o interface{}, paths ...string) error {
+	for _, path := range paths {
+		if path == "" {
+			continue
+		}
+
+		if _, err := fs.Stat(path); os.IsNotExist(err) {
+			continue
+		}
+
+		logger.Log("loading config from %s", path)
+
+		content, err := afero.ReadFile(fs, path)
+		if err != nil {
+			return err
+		}
+
+		err = yaml.Unmarshal(content, o)
+		return err
+	}
+
+	return fileNotFoundErr
 }
 
 func getTargetConfig(targetName string, targets []Target) (*Target, error) {
@@ -195,7 +244,8 @@ func mergeDeployFolders(rootFolder string, defaultHelmChart *HelmChart, destFold
 }
 
 func processDeployFolder(rootFolder string, defaultOrder int, defaultHelmChart *HelmChart, f DeployFolder) DeployFolder {
-	f.Path = path.Join(rootFolder, f.Path)
+	// todo: add this back
+	// f.Path = path.Join(rootFolder, f.Path)
 
 	if f.Order == nil {
 		f.Order = &defaultOrder

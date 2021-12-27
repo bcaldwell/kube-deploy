@@ -2,12 +2,14 @@ package deploy
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"os"
 	"os/exec"
 	"path"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -22,6 +24,8 @@ import (
 	"github.com/spf13/afero"
 )
 
+var errNoGitDirFound = errors.New("no git repository found")
+
 func (d *Deploy) Run(target string) error {
 	var err error
 	// returns a FS were the config folder is the root
@@ -30,7 +34,7 @@ func (d *Deploy) Run(target string) error {
 		return err
 	}
 
-	err = d.ConfigureFolderFromMetadata("/", target)
+	err = d.ConfigureFolderFromMetadata(d.ConfigFolder, target)
 	if err != nil {
 		return err
 	}
@@ -57,7 +61,7 @@ func (d *Deploy) Run(target string) error {
 
 	d.fs = afero.NewBasePathFs(afero.NewOsFs(), d.rootDir)
 
-	err = copyAndProcessFolder(d.srcFs, "/", d.fs, "/", func(_, src string) string {
+	err = copyAndProcessFolder(d.srcFs, d.ConfigFolder, d.fs, "/", func(_, src string) string {
 		return os.Expand(src, expandEnvSafe)
 	})
 	if err != nil {
@@ -125,7 +129,36 @@ func (d *Deploy) setupFS() (afero.Fs, error) {
 		return nil, fmt.Errorf("config folder either doesnt exist or is not a directory: %s", d.ConfigFolder)
 	}
 
-	return afero.NewBasePathFs(afero.NewOsFs(), d.ConfigFolder), nil
+	// setup fs at the root of the git repo, to support repo level config
+	gitRoot, err := findTopLevelGitDir(d.ConfigFolder)
+
+	if errors.Is(err, errNoGitDirFound) {
+		gitRoot = d.ConfigFolder
+	} else if err != nil {
+		return nil, err
+	}
+
+	return afero.NewBasePathFs(afero.NewOsFs(), gitRoot), nil
+}
+
+// based on https://github.com/GoogleContainerTools/skaffold/pull/275/files
+func findTopLevelGitDir(workingDir string) (string, error) {
+	dir, err := filepath.Abs(workingDir)
+	if err != nil {
+		return "", fmt.Errorf("invalid working dir %w", err)
+	}
+
+	for {
+		if _, err := os.Stat(filepath.Join(dir, ".git")); err == nil {
+			return dir, nil
+		}
+
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return "", errNoGitDirFound
+		}
+		dir = parent
+	}
 }
 
 func getGitAuth() (transport.AuthMethod, error) {
