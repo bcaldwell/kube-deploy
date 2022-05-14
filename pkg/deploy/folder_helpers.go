@@ -35,11 +35,11 @@ func copyAndProcessFolder(srcFs afero.Fs, srcFolder string, destFs afero.Fs, des
 			return err
 		}
 
-		relPath, err := filepath.Rel(srcFolder, src)
-		if err != nil {
-			return err
-		}
-		dest := filepath.Join(destFolder, relPath)
+		// relPath, err := filepath.Rel(srcFolder, src)
+		// if err != nil {
+		// 	return err
+		// }
+		dest := filepath.Join(destFolder, src)
 
 		if srcFileInfo.IsDir() {
 			err = destFs.MkdirAll(dest, srcFileInfo.Mode())
